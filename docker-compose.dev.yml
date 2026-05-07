@@ -1,0 +1,191 @@
+version: "3.9"
+
+# Development override: mounts local source for hot-reload,
+# exposes all ports, disables production optimizations.
+
+services:
+  authify-api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+      target: base
+    container_name: authify-api-dev
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-3000}:3000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-authify}:${DB_PASSWORD:-password}@postgres:5432/${DB_NAME:-authify}
+      REDIS_URL: redis://redis:6379
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      API_URL: http://localhost:3000
+      DASHBOARD_URL: http://localhost:3001
+      NODE_ENV: development
+    volumes:
+      - ./apps/api/src:/app/apps/api/src:ro
+      - ./packages/db/src:/app/packages/db/src:ro
+      - ./packages/shared/src:/app/packages/shared/src:ro
+      - ./apps/api/package.json:/app/apps/api/package.json:ro
+      - ./packages/db/package.json:/app/packages/db/package.json:ro
+      - ./packages/shared/package.json:/app/packages/shared/package.json:ro
+      - ./package.json:/app/package.json:ro
+      - ./pnpm-workspace.yaml:/app/pnpm-workspace.yaml:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - authify
+    command: ["bun", "run", "--watch", "apps/api/src/index.ts"]
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  authify-dashboard:
+    build:
+      context: .
+      dockerfile: docker/dashboard.Dockerfile
+      target: builder
+    container_name: authify-dashboard-dev
+    restart: unless-stopped
+    ports:
+      - "${DASHBOARD_PORT:-3001}:5173"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      VITE_API_URL: http://localhost:3000
+    volumes:
+      - ./apps/dashboard/src:/app/apps/dashboard/src:ro
+      - ./apps/dashboard/index.html:/app/apps/dashboard/index.html:ro
+      - ./apps/dashboard/vite.config.ts:/app/apps/dashboard/vite.config.ts:ro
+      - ./apps/dashboard/tailwind.config.ts:/app/apps/dashboard/tailwind.config.ts:ro
+      - ./apps/dashboard/postcss.config.js:/app/apps/dashboard/postcss.config.js:ro
+      - ./packages/sdk/src:/app/packages/sdk/src:ro
+      - ./packages/shared/src:/app/packages/shared/src:ro
+      - ./apps/dashboard/package.json:/app/apps/dashboard/package.json:ro
+      - ./packages/sdk/package.json:/app/packages/sdk/package.json:ro
+      - ./packages/shared/package.json:/app/packages/shared/package.json:ro
+      - ./package.json:/app/package.json:ro
+      - ./pnpm-workspace.yaml:/app/pnpm-workspace.yaml:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+    depends_on:
+      authify-api:
+        condition: service_healthy
+    networks:
+      - authify
+    command: ["bun", "run", "dev", "--host", "0.0.0.0"]
+
+  authify-worker:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+      target: base
+    container_name: authify-worker-dev
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-authify}:${DB_PASSWORD:-password}@postgres:5432/${DB_NAME:-authify}
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: development
+    volumes:
+      - ./apps/api/src:/app/apps/api/src:ro
+      - ./packages/db/src:/app/packages/db/src:ro
+      - ./packages/shared/src:/app/packages/shared/src:ro
+      - ./apps/api/package.json:/app/apps/api/package.json:ro
+      - ./packages/db/package.json:/app/packages/db/package.json:ro
+      - ./packages/shared/package.json:/app/packages/shared/package.json:ro
+      - ./package.json:/app/package.json:ro
+      - ./pnpm-workspace.yaml:/app/pnpm-workspace.yaml:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - authify
+    command: ["bun", "run", "--watch", "apps/api/src/worker.ts"]
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: authify-postgres-dev
+    restart: unless-stopped
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ${DB_NAME:-authify}
+      POSTGRES_USER: ${DB_USER:-authify}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+    networks:
+      - authify
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-authify} -d ${DB_NAME:-authify}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: authify-redis-dev
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks:
+      - authify
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  minio:
+    image: minio/minio:latest
+    container_name: authify-minio-dev
+    restart: unless-stopped
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    command: server /data --console-address ":9001"
+    networks:
+      - authify
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local
+
+networks:
+  authify:
+    driver: bridge

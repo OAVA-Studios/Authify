@@ -1,0 +1,26 @@
+{
+  "name": "@authify/functions-runtime",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run dist/index.js",
+    "lint": "eslint src/**/*.ts",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@authify/db": "workspace:*",
+    "@authify/shared": "workspace:*",
+    "isolated-vm": "^5.0.0",
+    "bullmq": "^5.8.0",
+    "ioredis": "^5.4.0",
+    "pino": "^9.2.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}
