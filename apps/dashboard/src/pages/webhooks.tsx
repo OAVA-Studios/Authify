@@ -12,12 +12,14 @@ export default function WebhooksPage() {
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [url, setUrl] = useState('');
 
   async function load() {
     setLoading(true);
     try {
-      const res = await client.get('/v1/webhooks') as { data: Webhook[] };
-      setWebhooks(res.data);
+      const res = await client.get<Webhook[]>('/v1/webhooks');
+      setWebhooks(res);
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Failed to load webhooks', 'error');
     } finally {
@@ -28,6 +30,29 @@ export default function WebhooksPage() {
   useEffect(() => {
     load();
   }, []);
+
+  async function createWebhook() {
+    if (!name.trim() || !url.trim()) {
+      toast('Name and URL are required', 'error');
+      return;
+    }
+    try {
+      await client.post('/v1/webhooks', {
+        name: name.trim(),
+        url: url.trim(),
+        events: ['*'],
+        active: true,
+        retries: 3,
+      });
+      toast('Webhook created', 'success');
+      setOpen(false);
+      setName('');
+      setUrl('');
+      load();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to create webhook', 'error');
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -78,13 +103,13 @@ export default function WebhooksPage() {
         <DialogDescription>Configure a new webhook endpoint.</DialogDescription>
         <div className="mt-4 space-y-3">
           <label className="block text-sm text-slate-300">Name</label>
-          <Input placeholder="stripe-events" />
+          <Input placeholder="stripe-events" value={name} onChange={(e) => setName(e.target.value)} />
           <label className="block text-sm text-slate-300">URL</label>
-          <Input placeholder="https://example.com/webhook" />
+          <Input placeholder="https://example.com/webhook" value={url} onChange={(e) => setUrl(e.target.value)} />
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button variant="primary">Create</Button>
+          <Button variant="primary" onClick={createWebhook}>Create</Button>
         </DialogFooter>
       </Dialog>
     </div>

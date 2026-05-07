@@ -12,12 +12,14 @@ export default function FunctionsPage() {
   const [functions, setFunctions] = useState<ServerlessFunction[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [slug, setSlug] = useState('');
 
   async function load() {
     setLoading(true);
     try {
-      const res = await client.get('/v1/functions') as { data: ServerlessFunction[] };
-      setFunctions(res.data);
+      const res = await client.get<ServerlessFunction[]>('/v1/functions');
+      setFunctions(res);
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Failed to load functions', 'error');
     } finally {
@@ -28,6 +30,34 @@ export default function FunctionsPage() {
   useEffect(() => {
     load();
   }, []);
+
+  async function createFunction() {
+    if (!name.trim() || !slug.trim()) {
+      toast('Name and slug are required', 'error');
+      return;
+    }
+    try {
+      await client.post('/v1/functions', {
+        name: name.trim(),
+        slug: slug.trim(),
+        sourceCode: 'module.exports = async (ctx) => { return { status: 200, body: "Hello from Authify" }; };',
+        runtime: 'node22',
+        entrypoint: 'index.js',
+        triggerType: 'http',
+        envVars: {},
+        triggerConfig: {},
+        timeout: 30000,
+        memory: 256,
+      });
+      toast('Function created', 'success');
+      setOpen(false);
+      setName('');
+      setSlug('');
+      load();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to create function', 'error');
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -78,13 +108,13 @@ export default function FunctionsPage() {
         <DialogDescription>Deploy a new serverless function.</DialogDescription>
         <div className="mt-4 space-y-3">
           <label className="block text-sm text-slate-300">Name</label>
-          <Input placeholder="my-function" />
+          <Input placeholder="my-function" value={name} onChange={(e) => setName(e.target.value)} />
           <label className="block text-sm text-slate-300">Slug</label>
-          <Input placeholder="my-function" />
+          <Input placeholder="my-function" value={slug} onChange={(e) => setSlug(e.target.value)} />
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button variant="primary">Create</Button>
+          <Button variant="primary" onClick={createFunction}>Create</Button>
         </DialogFooter>
       </Dialog>
     </div>

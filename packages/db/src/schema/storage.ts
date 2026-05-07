@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, jsonb, integer, bigint, boolean, text, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, jsonb, bigint, boolean, text, index } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const storageBuckets = pgTable(

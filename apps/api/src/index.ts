@@ -62,17 +62,17 @@ app.get('/docs', (c) =>
 </head>
 <body>
   <div id="swagger-ui"></div>
-  <script src="/docs/swagger-ui-bundle.js" crossorigin></script>
-  <script src="/docs/swagger-ui-standalone-preset.js" crossorigin></script>
+  <script src="/docs/swagger-ui-bundle.js"></script>
+  <script src="/docs/swagger-ui-standalone-preset.js"></script>
   <script>
-    window.onload = function () {
+    document.addEventListener('DOMContentLoaded', function() {
       window.ui = SwaggerUIBundle({
         url: '/openapi.json',
         dom_id: '#swagger-ui',
         presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
         layout: 'StandaloneLayout',
       });
-    };
+    });
   </script>
 </body>
 </html>`)

@@ -18,7 +18,8 @@ const publicKey = await crypto.subtle.importKey(
 );
 
 function pemToArrayBuffer(pem: string, label: string): ArrayBuffer {
-  const b64 = pem
+  const normalized = pem.replace(/\\n/g, '\n');
+  const b64 = normalized
     .replace(new RegExp(`-----BEGIN ${label}-----`), '')
     .replace(new RegExp(`-----END ${label}-----`), '')
     .replace(/\s/g, '');

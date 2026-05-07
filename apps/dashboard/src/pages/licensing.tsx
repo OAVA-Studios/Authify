@@ -15,16 +15,18 @@ export default function LicensingPage() {
   const [loading, setLoading] = useState(true);
   const [appOpen, setAppOpen] = useState(false);
   const [keyOpen, setKeyOpen] = useState(false);
+  const [appName, setAppName] = useState('');
+  const [keyAppId, setKeyAppId] = useState('');
 
   async function load() {
     setLoading(true);
     try {
       const [a, k] = await Promise.all([
-        client.get('/v1/licensing/apps') as Promise<{ data: LicenseApp[] }>,
-        client.get('/v1/licensing/keys') as Promise<{ data: LicenseKey[] }>,
+        client.get<LicenseApp[]>('/v1/licensing/apps'),
+        client.get<LicenseKey[]>('/v1/licensing/keys'),
       ]);
-      setApps(a.data);
-      setKeys(k.data);
+      setApps(a);
+      setKeys(k);
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Failed to load licensing', 'error');
     } finally {
@@ -35,6 +37,49 @@ export default function LicensingPage() {
   useEffect(() => {
     load();
   }, []);
+
+  async function createApp() {
+    if (!appName.trim()) {
+      toast('Name is required', 'error');
+      return;
+    }
+    try {
+      await client.post('/v1/licensing/apps', {
+        name: appName.trim(),
+        version: '1.0.0',
+        hwidLocking: true,
+        maxDevices: 1,
+        antiDebug: false,
+      });
+      toast('License app created', 'success');
+      setAppOpen(false);
+      setAppName('');
+      load();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to create app', 'error');
+    }
+  }
+
+  async function createKey() {
+    if (!keyAppId.trim()) {
+      toast('App ID is required', 'error');
+      return;
+    }
+    try {
+      await client.post('/v1/licensing/keys', {
+        appId: keyAppId.trim(),
+        tier: 'basic',
+        maxActivations: 1,
+        quantity: 1,
+      });
+      toast('License key created', 'success');
+      setKeyOpen(false);
+      setKeyAppId('');
+      load();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to create key', 'error');
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -142,11 +187,11 @@ export default function LicensingPage() {
         <DialogDescription>Add a new application for license management.</DialogDescription>
         <div className="mt-4 space-y-3">
           <label className="block text-sm text-slate-300">Name</label>
-          <Input placeholder="My App" />
+          <Input placeholder="My App" value={appName} onChange={(e) => setAppName(e.target.value)} />
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => setAppOpen(false)}>Cancel</Button>
-          <Button variant="primary">Create</Button>
+          <Button variant="primary" onClick={createApp}>Create</Button>
         </DialogFooter>
       </Dialog>
 
@@ -155,11 +200,11 @@ export default function LicensingPage() {
         <DialogDescription>Generate a new license key.</DialogDescription>
         <div className="mt-4 space-y-3">
           <label className="block text-sm text-slate-300">App ID</label>
-          <Input placeholder="uuid" />
+          <Input placeholder="uuid" value={keyAppId} onChange={(e) => setKeyAppId(e.target.value)} />
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => setKeyOpen(false)}>Cancel</Button>
-          <Button variant="primary">Create</Button>
+          <Button variant="primary" onClick={createKey}>Create</Button>
         </DialogFooter>
       </Dialog>
     </div>

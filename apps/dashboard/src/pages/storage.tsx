@@ -11,12 +11,13 @@ export default function StoragePage() {
   const [buckets, setBuckets] = useState<StorageBucket[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
 
   async function load() {
     setLoading(true);
     try {
-      const res = await client.get('/v1/storage/buckets') as { data: StorageBucket[] };
-      setBuckets(res.data);
+      const res = await client.get<StorageBucket[]>('/v1/storage/buckets');
+      setBuckets(res);
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Failed to load buckets', 'error');
     } finally {
@@ -27,6 +28,27 @@ export default function StoragePage() {
   useEffect(() => {
     load();
   }, []);
+
+  async function createBucket() {
+    if (!name.trim()) {
+      toast('Name is required', 'error');
+      return;
+    }
+    try {
+      await client.post('/v1/storage/buckets', {
+        name: name.trim(),
+        public: false,
+        maxFileSize: 1073741824,
+        allowedMimeTypes: [],
+      });
+      toast('Bucket created', 'success');
+      setOpen(false);
+      setName('');
+      load();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to create bucket', 'error');
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -73,11 +95,11 @@ export default function StoragePage() {
         <DialogDescription>Add a new storage bucket.</DialogDescription>
         <div className="mt-4 space-y-3">
           <label className="block text-sm text-slate-300">Name</label>
-          <Input placeholder="avatars" />
+          <Input placeholder="avatars" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button variant="primary">Create</Button>
+          <Button variant="primary" onClick={createBucket}>Create</Button>
         </DialogFooter>
       </Dialog>
     </div>

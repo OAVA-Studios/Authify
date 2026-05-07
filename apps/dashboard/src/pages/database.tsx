@@ -11,12 +11,14 @@ export default function DatabasePage() {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [tableName, setTableName] = useState('');
 
   async function load() {
     setLoading(true);
     try {
-      const res = await client.get('/v1/database/collections') as { data: Collection[] };
-      setCollections(res.data);
+      const res = await client.get<Collection[]>('/v1/database/collections');
+      setCollections(res);
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Failed to load collections', 'error');
     } finally {
@@ -27,6 +29,28 @@ export default function DatabasePage() {
   useEffect(() => {
     load();
   }, []);
+
+  async function createCollection() {
+    if (!name.trim() || !tableName.trim()) {
+      toast('Name and table name are required', 'error');
+      return;
+    }
+    try {
+      await client.post('/v1/database/collections', {
+        name: name.trim(),
+        tableName: tableName.trim(),
+        schema: {},
+        rlsEnabled: true,
+      });
+      toast('Collection created', 'success');
+      setOpen(false);
+      setName('');
+      setTableName('');
+      load();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to create collection', 'error');
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -73,13 +97,13 @@ export default function DatabasePage() {
         <DialogDescription>Define a new collection schema.</DialogDescription>
         <div className="mt-4 space-y-3">
           <label className="block text-sm text-slate-300">Name</label>
-          <Input placeholder="users" />
+          <Input placeholder="users" value={name} onChange={(e) => setName(e.target.value)} />
           <label className="block text-sm text-slate-300">Table Name</label>
-          <Input placeholder="users" />
+          <Input placeholder="users" value={tableName} onChange={(e) => setTableName(e.target.value)} />
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button variant="primary">Create</Button>
+          <Button variant="primary" onClick={createCollection}>Create</Button>
         </DialogFooter>
       </Dialog>
     </div>

@@ -19,11 +19,11 @@ export default function RealtimePage() {
     setLoading(true);
     try {
       const [s, c] = await Promise.all([
-        client.get('/v1/realtime/stats') as Promise<{ data: RealtimeStats }>,
-        client.get('/v1/realtime/channels') as Promise<{ data: RealtimeChannelInfo[] }>,
+        client.get<RealtimeStats>('/v1/realtime/stats'),
+        client.get<RealtimeChannelInfo[]>('/v1/realtime/channels'),
       ]);
-      setStats(s.data);
-      setChannels(c.data);
+      setStats(s);
+      setChannels(c);
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Failed to load realtime stats', 'error');
     } finally {

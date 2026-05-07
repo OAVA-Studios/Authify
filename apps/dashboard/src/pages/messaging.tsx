@@ -14,16 +14,21 @@ export default function MessagingPage() {
   const [loading, setLoading] = useState(true);
   const [provOpen, setProvOpen] = useState(false);
   const [tmplOpen, setTmplOpen] = useState(false);
+  const [provName, setProvName] = useState('');
+  const [provType, setProvType] = useState('smtp');
+  const [tmplName, setTmplName] = useState('');
+  const [tmplType, setTmplType] = useState('email');
+  const [tmplBody, setTmplBody] = useState('');
 
   async function load() {
     setLoading(true);
     try {
       const [p, t] = await Promise.all([
-        client.get('/v1/messaging/providers') as Promise<{ data: MessagingProvider[] }>,
-        client.get('/v1/messaging/templates') as Promise<{ data: MessageTemplate[] }>,
+        client.get<MessagingProvider[]>('/v1/messaging/providers'),
+        client.get<MessageTemplate[]>('/v1/messaging/templates'),
       ]);
-      setProviders(p.data);
-      setTemplates(t.data);
+      setProviders(p);
+      setTemplates(t);
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Failed to load messaging', 'error');
     } finally {
@@ -34,6 +39,51 @@ export default function MessagingPage() {
   useEffect(() => {
     load();
   }, []);
+
+  async function createProvider() {
+    if (!provName.trim()) {
+      toast('Name is required', 'error');
+      return;
+    }
+    try {
+      await client.post('/v1/messaging/providers', {
+        name: provName.trim(),
+        type: provType,
+        config: {},
+        isDefault: false,
+      });
+      toast('Provider created', 'success');
+      setProvOpen(false);
+      setProvName('');
+      setProvType('smtp');
+      load();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to create provider', 'error');
+    }
+  }
+
+  async function createTemplate() {
+    if (!tmplName.trim()) {
+      toast('Name is required', 'error');
+      return;
+    }
+    try {
+      await client.post('/v1/messaging/templates', {
+        name: tmplName.trim(),
+        type: tmplType,
+        body: tmplBody || ' ',
+        variables: [],
+      });
+      toast('Template created', 'success');
+      setTmplOpen(false);
+      setTmplName('');
+      setTmplType('email');
+      setTmplBody('');
+      load();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to create template', 'error');
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -125,11 +175,25 @@ export default function MessagingPage() {
         <DialogDescription>Configure a messaging provider.</DialogDescription>
         <div className="mt-4 space-y-3">
           <label className="block text-sm text-slate-300">Name</label>
-          <Input placeholder="SMTP" />
+          <Input placeholder="SMTP" value={provName} onChange={(e) => setProvName(e.target.value)} />
+          <label className="block text-sm text-slate-300">Type</label>
+          <select
+            value={provType}
+            onChange={(e) => setProvType(e.target.value)}
+            className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+          >
+            <option value="smtp">SMTP</option>
+            <option value="resend">Resend</option>
+            <option value="mailgun">Mailgun</option>
+            <option value="sendgrid">Sendgrid</option>
+            <option value="twilio">Twilio</option>
+            <option value="vonage">Vonage</option>
+            <option value="fcm">FCM</option>
+          </select>
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => setProvOpen(false)}>Cancel</Button>
-          <Button variant="primary">Create</Button>
+          <Button variant="primary" onClick={createProvider}>Create</Button>
         </DialogFooter>
       </Dialog>
 
@@ -138,11 +202,29 @@ export default function MessagingPage() {
         <DialogDescription>Create an email/SMS/push template.</DialogDescription>
         <div className="mt-4 space-y-3">
           <label className="block text-sm text-slate-300">Name</label>
-          <Input placeholder="welcome-email" />
+          <Input placeholder="welcome-email" value={tmplName} onChange={(e) => setTmplName(e.target.value)} />
+          <label className="block text-sm text-slate-300">Type</label>
+          <select
+            value={tmplType}
+            onChange={(e) => setTmplType(e.target.value)}
+            className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+          >
+            <option value="email">Email</option>
+            <option value="sms">SMS</option>
+            <option value="push">Push</option>
+          </select>
+          <label className="block text-sm text-slate-300">Body</label>
+          <textarea
+            value={tmplBody}
+            onChange={(e) => setTmplBody(e.target.value)}
+            placeholder="Hello {{name}}!"
+            className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+            rows={4}
+          />
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => setTmplOpen(false)}>Cancel</Button>
-          <Button variant="primary">Create</Button>
+          <Button variant="primary" onClick={createTemplate}>Create</Button>
         </DialogFooter>
       </Dialog>
     </div>

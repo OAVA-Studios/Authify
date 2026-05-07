@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, boolean, timestamp, jsonb, text, index, integer } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, boolean, timestamp, jsonb, text, index } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const users = pgTable(
@@ -33,8 +33,8 @@ export const sessions = pgTable(
     id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
     userId: uuid('user_id').notNull(),
     projectId: uuid('project_id').notNull(),
-    token: varchar('token', { length: 512 }).notNull().unique(),
-    refreshToken: varchar('refresh_token', { length: 512 }).unique(),
+    token: text('token').notNull().unique(),
+    refreshToken: text('refresh_token').unique(),
     deviceInfo: jsonb('device_info').default(sql`'{}'::jsonb`),
     ipAddress: varchar('ip_address', { length: 64 }),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
