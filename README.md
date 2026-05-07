@@ -75,7 +75,7 @@ A self-hostable Backend-as-a-Service (BaaS) platform combining authentication, l
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/authify/authify.git
+git clone https://github.com/OAVA-Studios/Authify.git
 cd authify
 pnpm install
 ```
@@ -165,7 +165,6 @@ pnpm turbo test
 
 ## API Documentation
 
-The API is documented with a comprehensive OpenAPI 3.1.0 specification served at runtime:
 
 - **OpenAPI JSON**: `GET /openapi.json`
 - **Swagger UI**: `GET /docs`
@@ -174,22 +173,434 @@ The API is documented with a comprehensive OpenAPI 3.1.0 specification served at
 
 Two security schemes are supported:
 
-1. **Bearer Auth** (`Authorization: Bearer <jwt>`) — for user sessions
-2. **API Key** (`x-api-key: <key>`) — for service-to-service auth
+| Scheme | Header | Use Case |
+|--------|--------|----------|
+| **Bearer Auth** | `Authorization: Bearer <jwt>` | User sessions (login required) |
+| **API Key** | `x-api-key: <key>` | Service-to-service, public endpoints |
 
-### Endpoints
+Most admin endpoints require **Bearer Auth** + `role=admin`. Document and storage read operations also accept **API Key** for SDK usage.
 
-| Tag | Base Path | Operations |
-|-----|-----------|------------|
-| Auth | `/v1/auth` | register, login, logout, refresh, me, 2FA, sessions |
-| OAuth | `/v1/auth/oauth` | Google, GitHub, Discord, Microsoft OAuth2 flows |
-| Licensing | `/v1/licensing` | apps, keys, activate, validate, heartbeat, variables, blacklist |
-| Database | `/v1/database` | collections, policies, documents |
-| Storage | `/v1/storage` | buckets, uploads, files, transforms |
-| Functions | `/v1/functions` | create, invoke, trigger, executions |
-| Messaging | `/v1/messaging` | providers, templates, send |
-| Webhooks | `/v1/webhooks` | endpoints, deliveries, trigger |
-| Realtime | `/v1/realtime` | WebSocket upgrade, channels, broadcast |
+### Quick Authentication Flow
+
+```bash
+# 1. Register
+curl -X POST http://localhost:4000/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -H "x-project-id: your-project-id" \
+  -d '{"email":"admin@example.com","password":"SecurePass123!"}'
+
+# 2. Login
+curl -X POST http://localhost:4000/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -H "x-project-id: your-project-id" \
+  -d '{"email":"admin@example.com","password":"SecurePass123!"}'
+# Response: { "success": true, "data": { "accessToken": "...", "refreshToken": "..." } }
+
+# 3. Use Bearer token for admin endpoints
+curl -H "Authorization: Bearer <accessToken>" \
+  -H "x-project-id: your-project-id" \
+  http://localhost:4000/v1/licensing/apps
+```
+
+---
+
+### Auth Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/v1/auth/register` | — | Register new user |
+| `POST` | `/v1/auth/login` | — | Login (returns JWT pair) |
+| `POST` | `/v1/auth/logout` | Bearer | Invalidate current session |
+| `POST` | `/v1/auth/refresh` | — | Refresh access token |
+| `GET`  | `/v1/auth/me` | Bearer | Get current user profile |
+| `PATCH`| `/v1/auth/me` | Bearer | Update profile / password |
+| `POST` | `/v1/auth/password-reset-request` | — | Request password reset email |
+| `POST` | `/v1/auth/password-reset` | — | Reset password with token |
+| `POST` | `/v1/auth/verify-email-request` | Bearer | Request verification email |
+| `POST` | `/v1/auth/verify-email` | — | Verify email with token |
+| `POST` | `/v1/auth/2fa/enable` | Bearer | Enable TOTP 2FA (returns QR) |
+| `POST` | `/v1/auth/2fa/verify` | Bearer | Confirm and activate 2FA |
+| `POST` | `/v1/auth/2fa/disable` | Bearer | Disable 2FA |
+| `GET`  | `/v1/auth/sessions` | Bearer | List active sessions |
+| `DELETE`| `/v1/auth/sessions` | Bearer | Revoke all other sessions |
+| `DELETE`| `/v1/auth/sessions/{id}` | Bearer | Revoke specific session |
+
+#### OAuth2 Providers
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET`  | `/v1/auth/oauth/{provider}` | Start OAuth flow (google, github, discord, microsoft) |
+| `GET`  | `/v1/auth/oauth/{provider}/callback` | OAuth callback (handled by browser) |
+
+---
+
+### Licensing Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET`  | `/v1/licensing/apps` | Bearer (admin) | List license apps |
+| `POST` | `/v1/licensing/apps` | Bearer (admin) | Create license app |
+| `GET`  | `/v1/licensing/apps/{id}` | Bearer | Get app details |
+| `PATCH`| `/v1/licensing/apps/{id}` | Bearer (admin) | Update app |
+| `DELETE`| `/v1/licensing/apps/{id}` | Bearer (admin) | Delete app |
+| `GET`  | `/v1/licensing/keys` | Bearer (admin) | List license keys (paginated) |
+| `POST` | `/v1/licensing/keys` | Bearer (admin) | Create license key(s) |
+| `GET`  | `/v1/licensing/keys/{id}` | Bearer | Get key details |
+| `PATCH`| `/v1/licensing/keys/{id}` | Bearer (admin) | Update key |
+| `DELETE`| `/v1/licensing/keys/{id}` | Bearer (admin) | Delete key |
+| `POST` | `/v1/licensing/activate` | API Key | Activate key with HWID |
+| `POST` | `/v1/licensing/validate` | API Key | Validate key + HWID |
+| `POST` | `/v1/licensing/heartbeat` | API Key | Heartbeat ping |
+| `POST` | `/v1/licensing/deactivate` | API Key | Deactivate device |
+| `GET`  | `/v1/licensing/activations` | Bearer (admin) | List activations |
+| `DELETE`| `/v1/licensing/activations/{id}` | Bearer (admin) | Delete activation |
+| `GET`  | `/v1/licensing/variables` | Bearer (admin) | List variables |
+| `POST` | `/v1/licensing/variables` | Bearer (admin) | Create variable |
+| `PATCH`| `/v1/licensing/variables/{id}` | Bearer (admin) | Update variable |
+| `DELETE`| `/v1/licensing/variables/{id}` | Bearer (admin) | Delete variable |
+| `GET`  | `/v1/licensing/blacklist` | Bearer (admin) | List blacklist entries |
+| `POST` | `/v1/licensing/blacklist` | Bearer (admin) | Add blacklist entry |
+| `DELETE`| `/v1/licensing/blacklist/{id}` | Bearer (admin) | Remove entry |
+
+#### Licensing Example
+
+```bash
+# Create a license app
+curl -X POST http://localhost:4000/v1/licensing/apps \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -H "x-project-id: your-project-id" \
+  -d '{"name":"My Desktop App","hwidLocking":true,"maxDevices":3}'
+
+# Create a license key for that app
+curl -X POST http://localhost:4000/v1/licensing/keys \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -H "x-project-id: your-project-id" \
+  -d '{"appId":"uuid-here","tier":"pro","maxActivations":3,"quantity":5}'
+
+# Client-side: activate
+curl -X POST http://localhost:4000/v1/licensing/activate \
+  -H "Content-Type: application/json" \
+  -H "x-project-id: your-project-id" \
+  -H "x-api-key: your-api-key" \
+  -d '{"key":"XXXXX-XXXXX-XXXXX-XXXXX","hwid":"device-123","deviceName":"MacBook Pro"}'
+```
+
+---
+
+### Database Endpoints
+
+Collections with dynamic PostgreSQL tables and Row-Level Security (RLS).
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET`  | `/v1/database/collections` | Bearer (admin) | List collections |
+| `POST` | `/v1/database/collections` | Bearer (admin) | Create collection |
+| `GET`  | `/v1/database/collections/{id}` | Bearer | Get collection |
+| `PATCH`| `/v1/database/collections/{id}` | Bearer (admin) | Update collection |
+| `DELETE`| `/v1/database/collections/{id}` | Bearer (admin) | Delete collection |
+| `GET`  | `/v1/database/collections/{id}/policies` | Bearer (admin) | List policies |
+| `POST` | `/v1/database/collections/{id}/policies` | Bearer (admin) | Create policy |
+| `PATCH`| `/v1/database/policies/{policyId}` | Bearer (admin) | Update policy |
+| `DELETE`| `/v1/database/policies/{policyId}` | Bearer (admin) | Delete policy |
+| `GET`  | `/v1/database/collections/{name}/documents` | Bearer/API Key | List documents (cursor pagination) |
+| `POST` | `/v1/database/collections/{name}/documents` | Bearer/API Key | Create document |
+| `GET`  | `/v1/database/collections/{name}/documents/{docId}` | Bearer/API Key | Get document |
+| `PATCH`| `/v1/database/collections/{name}/documents/{docId}` | Bearer/API Key | Update document |
+| `DELETE`| `/v1/database/collections/{name}/documents/{docId}` | Bearer/API Key | Delete document |
+
+#### Database Example
+
+```bash
+# Create a collection
+curl -X POST http://localhost:4000/v1/database/collections \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -H "x-project-id: your-project-id" \
+  -d '{"name":"Users","tableName":"users","schema":{"name":{"type":"string","required":true},"age":{"type":"integer"}},"rlsEnabled":true}'
+
+# Add a policy (users can only read their own data)
+curl -X POST http://localhost:4000/v1/database/collections/{id}/policies \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -H "x-project-id: your-project-id" \
+  -d '{"name":"self-read","operation":"read","condition":{"eq":["data.userId","{{userId}}"]},"role":"user"}'
+
+# Create a document
+curl -X POST http://localhost:4000/v1/database/collections/users/documents \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -H "x-project-id: your-project-id" \
+  -d '{"data":{"name":"John","age":30,"userId":"user-uuid"}}'
+```
+
+---
+
+### Storage Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET`  | `/v1/storage/buckets` | Bearer (admin) | List buckets |
+| `POST` | `/v1/storage/buckets` | Bearer (admin) | Create bucket |
+| `GET`  | `/v1/storage/buckets/{id}` | Bearer | Get bucket |
+| `PATCH`| `/v1/storage/buckets/{id}` | Bearer (admin) | Update bucket |
+| `DELETE`| `/v1/storage/buckets/{id}` | Bearer (admin) | Delete bucket |
+| `POST` | `/v1/storage/upload` | Bearer/API Key | Upload file (query: `bucketId`, optional `path`) |
+| `POST` | `/v1/storage/uploads/init` | Bearer/API Key | Init chunked upload |
+| `POST` | `/v1/storage/uploads/chunk` | Bearer/API Key | Upload chunk (query: `uploadId`, `chunkNumber`, `totalChunks`) |
+| `POST` | `/v1/storage/uploads/complete` | Bearer/API Key | Complete chunked upload |
+| `GET`  | `/v1/storage/files` | Bearer/API Key | List files (query: `bucketId`) |
+| `GET`  | `/v1/storage/files/{id}` | Bearer/API Key | Get file details |
+| `GET`  | `/v1/storage/files/{id}/download` | Bearer/API Key | Download file |
+| `DELETE`| `/v1/storage/files/{id}` | Bearer/API Key | Delete file |
+| `GET`  | `/v1/storage/files/{id}/transform` | Bearer/API Key | Transform image (query: `w`, `h`, `q`, `f`, `fit`) |
+
+#### Storage Example
+
+```bash
+# Create bucket
+curl -X POST http://localhost:4000/v1/storage/buckets \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -H "x-project-id: your-project-id" \
+  -d '{"name":"avatars","public":false,"maxFileSize":5242880,"allowedMimeTypes":["image/jpeg","image/png"]}'
+
+# Upload file
+curl -X POST "http://localhost:4000/v1/storage/upload?bucketId=uuid" \
+  -H "Authorization: Bearer <token>" \
+  -H "x-project-id: your-project-id" \
+  -H "Content-Type: image/png" \
+  --data-binary @avatar.png
+
+# Transform image (resize to 200x200)
+curl "http://localhost:4000/v1/storage/files/{id}/transform?w=200&h=200&f=webp" \
+  -H "Authorization: Bearer <token>" \
+  -H "x-project-id: your-project-id" \
+  --output resized.webp
+```
+
+---
+
+### Functions Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET`  | `/v1/functions` | Bearer (admin) | List functions (paginated) |
+| `POST` | `/v1/functions` | Bearer (admin) | Create function |
+| `GET`  | `/v1/functions/{id}` | Bearer | Get function |
+| `PATCH`| `/v1/functions/{id}` | Bearer (admin) | Update function |
+| `DELETE`| `/v1/functions/{id}` | Bearer (admin) | Delete function |
+| `ALL`  | `/v1/functions/{slug}/invoke` | Bearer/API Key | Invoke HTTP trigger |
+| `POST` | `/v1/functions/{slug}/trigger` | Bearer | Async trigger (enqueue) |
+| `GET`  | `/v1/functions/executions` | Bearer (admin) | List executions |
+| `GET`  | `/v1/functions/executions/{id}` | Bearer | Get execution |
+| `DELETE`| `/v1/functions/executions/{id}` | Bearer (admin) | Delete execution |
+
+#### Functions Example
+
+```bash
+# Create a serverless function
+curl -X POST http://localhost:4000/v1/functions \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -H "x-project-id: your-project-id" \
+  -d '{
+    "name":"Hello World",
+    "slug":"hello",
+    "runtime":"node22",
+    "sourceCode":"module.exports = async (ctx) => { return { status: 200, body: { message: \"Hello \" + ctx.query.name } }; };",
+    "triggerType":"http",
+    "timeout":30000,
+    "memory":256
+  }'
+
+# Invoke it
+curl "http://localhost:4000/v1/functions/hello/invoke?name=Authify" \
+  -H "Authorization: Bearer <token>" \
+  -H "x-project-id: your-project-id"
+
+# Async trigger
+curl -X POST http://localhost:4000/v1/functions/hello/trigger \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -H "x-project-id: your-project-id" \
+  -d '{"event":"user.signup","payload":{"userId":"123"}}'
+```
+
+---
+
+### Messaging Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET`  | `/v1/messaging/providers` | Bearer (admin) | List providers |
+| `POST` | `/v1/messaging/providers` | Bearer (admin) | Create provider |
+| `GET`  | `/v1/messaging/providers/{id}` | Bearer | Get provider |
+| `PATCH`| `/v1/messaging/providers/{id}` | Bearer (admin) | Update provider |
+| `DELETE`| `/v1/messaging/providers/{id}` | Bearer (admin) | Delete provider |
+| `GET`  | `/v1/messaging/templates` | Bearer (admin) | List templates |
+| `POST` | `/v1/messaging/templates` | Bearer (admin) | Create template |
+| `GET`  | `/v1/messaging/templates/{id}` | Bearer | Get template |
+| `PATCH`| `/v1/messaging/templates/{id}` | Bearer (admin) | Update template |
+| `DELETE`| `/v1/messaging/templates/{id}` | Bearer (admin) | Delete template |
+| `POST` | `/v1/messaging/send` | Bearer/API Key | Send message |
+| `GET`  | `/v1/messaging/messages` | Bearer (admin) | List sent messages |
+| `GET`  | `/v1/messaging/messages/{id}` | Bearer | Get message |
+| `DELETE`| `/v1/messaging/messages/{id}` | Bearer (admin) | Delete message |
+
+#### Messaging Example
+
+```bash
+# Create SMTP provider
+curl -X POST http://localhost:4000/v1/messaging/providers \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -H "x-project-id: your-project-id" \
+  -d '{
+    "name":"Primary SMTP",
+    "type":"smtp",
+    "config":{"host":"smtp.example.com","port":"587","user":"noreply","pass":"secret","secure":"true","from":"noreply@example.com"},
+    "isDefault":true
+  }'
+
+# Create template
+curl -X POST http://localhost:4000/v1/messaging/templates \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -H "x-project-id: your-project-id" \
+  -d '{
+    "name":"welcome-email",
+    "type":"email",
+    "subject":"Welcome to Authify",
+    "body":"Hello {{name}}, welcome aboard!",
+    "variables":["name"]
+  }'
+
+# Send email
+curl -X POST http://localhost:4000/v1/messaging/send \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -H "x-project-id: your-project-id" \
+  -d '{
+    "type":"email",
+    "to":"user@example.com",
+    "templateId":"template-uuid",
+    "variables":{"name":"John"}
+  }'
+```
+
+---
+
+### Webhooks Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET`  | `/v1/webhooks` | Bearer (admin) | List webhooks |
+| `POST` | `/v1/webhooks` | Bearer (admin) | Create webhook |
+| `GET`  | `/v1/webhooks/{id}` | Bearer | Get webhook |
+| `PATCH`| `/v1/webhooks/{id}` | Bearer (admin) | Update webhook |
+| `DELETE`| `/v1/webhooks/{id}` | Bearer (admin) | Delete webhook |
+| `GET`  | `/v1/webhooks/deliveries` | Bearer (admin) | List deliveries |
+| `POST` | `/v1/webhooks/trigger` | Bearer/API Key | Trigger webhooks by event |
+
+#### Webhooks Example
+
+```bash
+# Create webhook endpoint
+curl -X POST http://localhost:4000/v1/webhooks \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -H "x-project-id: your-project-id" \
+  -d '{
+    "name":"License Events",
+    "url":"https://your-app.com/webhooks/license",
+    "events":["license.activated","license.revoked"],
+    "retries":3
+  }'
+
+# Trigger manually
+curl -X POST http://localhost:4000/v1/webhooks/trigger \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -H "x-project-id: your-project-id" \
+  -d '{"event":"license.activated","payload":{"key":"XXXXX","hwid":"abc123"}}'
+```
+
+---
+
+### Realtime Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET`  | `/v1/realtime` | — | WebSocket upgrade (`?project_id=xxx`) |
+| `GET`  | `/v1/realtime/channels` | Bearer | List channels |
+| `GET`  | `/v1/realtime/channels/{name}` | Bearer | Channel details |
+| `POST` | `/v1/realtime/broadcast` | Bearer (admin) | Admin broadcast |
+| `POST` | `/v1/realtime/broadcast/project` | Bearer/API Key | Project-scoped broadcast |
+| `GET`  | `/v1/realtime/stats` | Bearer | Connection stats |
+
+#### Realtime WebSocket Example
+
+```javascript
+const ws = new WebSocket('ws://localhost:4000/v1/realtime?project_id=your-project-id');
+
+ws.onopen = () => {
+  // Subscribe to a channel
+  ws.send(JSON.stringify({
+    type: 'subscribe',
+    channel: 'updates',
+    event: 'new'
+  }));
+};
+
+ws.onmessage = (event) => {
+  const msg = JSON.parse(event.data);
+  console.log('Received:', msg);
+};
+
+// Broadcast from server
+fetch('http://localhost:4000/v1/realtime/broadcast/project', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer <token>',
+    'Content-Type': 'application/json',
+    'x-project-id': 'your-project-id'
+  },
+  body: JSON.stringify({
+    channel: 'updates',
+    event: 'new',
+    payload: { message: 'Hello subscribers!' }
+  })
+});
+```
+
+---
+
+### Error Responses
+
+All errors follow a consistent format:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Resource not found"
+  },
+  "requestId": "uuid-request-id"
+}
+```
+
+| Status | Code | Description |
+|--------|------|-------------|
+| `400` | `BAD_REQUEST` | Invalid input |
+| `401` | `UNAUTHORIZED` | Missing/invalid auth |
+| `403` | `FORBIDDEN` | Insufficient permissions |
+| `404` | `NOT_FOUND` | Resource not found |
+| `409` | `CONFLICT` | Duplicate/resource exists |
+| `429` | `RATE_LIMIT` | Too many requests |
+| `500` | `INTERNAL_ERROR` | Server error |
 
 ---
 
@@ -470,5 +881,5 @@ Contributions are welcome! Please open an issue or pull request on GitHub.
 
 ## Support
 
-- GitHub Issues: [github.com/authify/authify/issues](https://github.com/authify/authify/issues)
+- GitHub Issues: [github.com/OAVA-Studios/Authify/issues](https://github.com/OAVA-Studios/Authify/issues)
 - API Docs: [http://localhost:4000/docs](http://localhost:4000/docs) (when running locally)
